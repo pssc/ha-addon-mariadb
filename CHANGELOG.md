@@ -1,10 +1,5 @@
 # Changelog
 
-## 1.2
-- Change the way to migrate data
+## 0.11.X
+- local testing images
 
-## 1.1
-- Fix connection issue with 10.3.13
-
-## 1.0
-- Update MariaDB to 10.3.13

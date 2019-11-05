@@ -1,14 +1,17 @@
 {
-  "name": "MariaDB",
-  "version": "1.2",
-  "slug": "mariadb",
-  "description": "An SQL database server",
-  "url": "https://home-assistant.io/addons/mariadb/",
+  "name": "MariaDB+",
+  "version": "0.11.13",
+  "slug": "mariadbp",
+  "description": "An SQL database server plus...",
+  "url": "https://github.com/pssc/hassio-addons-mariadb/",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
   "startup": "system",
   "boot": "auto",
   "ports": {
-    "3306/tcp": 3306
+    "3306/tcp": null
+  },
+  "ports_description": {
+	  "3306/tcp": "Extenal DB access"
   },
   "options": {
     "databases": ["homeassistant"],
@@ -26,8 +29,28 @@
     ],
     "rights": [
       {"username": "str", "host": "str", "database": "str", "grant": "str"}
-    ]
+    ],
+    "ssl": "bool?",
+    "certfile": "str?",
+    "keyfile": "str?",
+    "leave_front_door_open": "bool?",
+    "tmpfs": "bool?",
+    "lowmem": "bool?",
+    "limit": "bool?",
+    "dump": "bool?",
+    "restore": "bool?",
+    "S6_KILL_GRACETIME": "int?",
+    "S6_SERVICES_GRACETIME": "int?"
   },
-  "image": "homeassistant/{arch}-addon-mariadb",
-  "timeout": 20
+  "timeout": 120,
+  "map": [
+      "config:rw",
+      "ssl",
+      "share:rw",
+      "backup:rw"
+  ],
+  "tmpfs":"size=4g,rw",
+  "hassio_api": true,
+  "homeassistant_api": true,
+  "legacy": true
 }
