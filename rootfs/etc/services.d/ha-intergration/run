@@ -1,0 +1,160 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Home Assistant Add-on: mariadb+ addon 
+# Starts the home assisant intergration
+# ==============================================================================
+
+. /opt/mariadb-support/lib/mariadbio.sh
+# ha Service Prefix from name...
+SERVICEP=${HAA_NAME:-"mariadbp"}
+# Secret for Service user for DB's 
+#FIXME use VAR
+SECF="/data/secret"
+# PID FILE once ready
+#FIXME use VAR
+MDRF="/tmpfs/.mariadb_ready" 
+# dump location
+DDATAL=${DDATAL:-"/data/dump"}
+# backup location
+BDBDIR=${BDBDIR:-"/backup"}
+
+function ha-event() {
+  local EVENTNAME="${SERVICEP}.${1}"
+  local EVENTDATA=${2}
+
+  bashio::log.info "Event ${EVENTNAME}"
+  curl -sS -X "POST" \
+    -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+    --data-binary "${EVENTDATA}" \
+    "http://supervisor/core/api/events/${EVENTNAME}"
+  echo
+}
+
+function main() {
+  bashio::log.info "Waiting for mariadb..."
+  while [[ ! -r "${MDRF}" ]];do
+    sleep 1
+  done
+  #MARIADB_PID=$(<"${MDRF}")
+  wait_mariadb
+
+  SERVICE="mysql"
+  if bashio::services.available "${SERVICE}";then
+      # Serice data cache
+      SERVICEF="/tmpfs/${SERVICE}.ha.service"
+      DBSH=$(bashio::services "mysql" host)
+      DBSP="^$(bashio::services "mysql" port)"
+      DBSU=$(bashio::services "mysql" username)
+      DBSP=$(bashio::services "mysql" password)
+      bashio::var.json \
+        host "${DBSH}" \
+        port "${DBSP}" \
+        username "${DBSU}" \
+        password "${DBSP}" > "${SERVICEF}"
+      bashio::log.info "Service ${SERVICE} $(cat ${SERVICEF})"
+      if ! bashio::fs.file_exists "${SECF}"; then
+        # Clone password
+        echo "${DBSP}" > "${SECF}"
+      fi
+  fi
+
+ 
+  # FIXME move to ssl?
+  if ! bashio::fs.file_exists "${SECF}"; then
+    bashio::log.info "Generating service password for Home Assistant"
+    pwgen 64 1 > "${SECF}"
+  fi
+  #readonly 
+  SECRET=$(<"${SECF}")
+  #local PAYLOAD
+  #readonly?
+  PAYLOAD=$(bashio::var.json \
+        host "$(hostname)" \
+        port "^3306" \
+        username "service" \
+        password "${SECRET}")
+
+  #FXIME Private? Clone per service...
+  bashio::log.info "Creating service user and permissions for Home Assistant"
+  mysql -e "CREATE USER 'service'@'172.30.32.%' IDENTIFIED BY '${SECRET}';" 2> /dev/null || true
+  mysql -e "CREATE USER 'service'@'172.30.33.%' IDENTIFIED BY '${SECRET}';" 2> /dev/null || true
+  mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'service'@'172.30.32.%' WITH GRANT OPTION;" 2> /dev/null || true
+  mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'service'@'172.30.33.%' WITH GRANT OPTION;" 2> /dev/null || true
+  mysql -e "FLUSH PRIVILEGES;" 2> /dev/null || true
+
+  # Send service information to the Supervisor
+  if bashio::config.exists register;then
+     for i in $(bashio::config register);do
+       SERVICE=$i
+       bashio::log.debug "Service Publish ${SERVICE} DATA: ${PAYLOAD}"
+       if bashio::services.publish "${SERVICE}" "${PAYLOAD}"; then
+         bashio::log.info "Successfully send ${SERVICE} service information to Home Assistant."
+         # FIXME Check registred? allways seems to suc even when failed
+       else
+         bashio::log.warning "Service ${SERVICE} message to Home Assistant failed!"
+       fi
+     done
+  fi
+  ha-event "service" "${PAYLOAD}"
+
+
+  bashio::log.info 'Starting the Home Assistant STDIN service...'
+  # shellcheck disable=SC2162
+  while read msg; do
+    bashio::log.debug "> ${msg}"
+    msg="${msg%\"}"
+    msg="${msg#\"}"
+    cmd="$(echo "$msg" | jq -r '.command|values' || true)"
+    bashio::log.info 'Received message command to execute:'
+    bashio::log.info "> ${cmd}"
+    case "${cmd}" in
+      ping) ha-event "ping" "{ }" ;;
+      restart) exit 0 ;;
+      service) ha-event "service" "${PAYLOAD}" ;;
+      shutdown)  # dup?
+        ha-event "shutdown" "{ }"
+        s6-svscanctl -t /var/run/s6/services
+        exit 0 
+      ;;
+      dump)
+        dump_mariadb "${DDATAL}"
+        ha-event "dump" "{ }"
+      ;;
+      backup)
+        #FIXME opt location
+        dump_mariadb
+        ha-event "backup" "{ }"
+      ;;
+      restore)
+        restore_mariadb
+        ha-event "restored" "{ }"
+      ;;
+      size)
+        mysql -e 'SELECT table_schema AS "Database", ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS "Size (MB)" FROM information_schema.TABLES GROUP BY table_schema;' | tee /tmpfs/mariadb_size.txt || true
+        ha-event "size" '{ "size" : "'"${result}"'", "output" : "'"$(</tmpfs/mariadb_size.txt)"'" }'
+      ;;
+      check)
+        local result
+        if mysqlcheck --all-databases | tee /tmpfs/mariadb_check_results; then
+          bashio::log.info "Command completed successfully."
+          result="true"
+        else
+          bashio::log.error "Check Command exited with a failure status."
+          result="false"
+        fi
+        ha-event "checked" '{ "ok" : "'"${result}"'", "output" : "'"$(</tmpfs/mariadb_check_results.txt)"'" }'
+      ;;
+      migrate)
+	# Get creds
+	# do dump
+	# load dump
+      ;;
+      *) bashio::log.error "Command not found: ${cmd}" ;;
+    esac
+  done < /proc/1/fd/0
+  bashio::log.info 'Finished the Home Assistant STDIN service...'
+  exit 1
+}
+
+main
+# vim: ft=sh

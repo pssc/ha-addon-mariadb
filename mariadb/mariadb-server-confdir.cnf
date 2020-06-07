@@ -1,1 +1,1 @@
-!includedir=/conf/mariadb.d/
+!includedir /config/mariadb/cnf.d

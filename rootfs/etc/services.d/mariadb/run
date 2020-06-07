@@ -1,0 +1,165 @@
+#!/usr/bin/with-contenv bash
+set -e
+set -u
+set -o pipefail
+
+# Paths
+MDATAL=${MDATAL:-"/data/databases"}
+DDATAL=${DDATAL:-"/data/dump"}
+MCDDIR=${MCDDIR:-"/config/mariadb"}
+MCFDIR=${MCFDIR:-"/config/mariadb/cnf.d"}
+TCFDIR=${TCDDIR:-"/etc/mariadb.t.d"}
+BDBDIR=${BDBDIR:-"/backup"}
+
+#Database
+DATABASES=${DATABASES:-""}
+RIGHTS=${RIGHTS:-""}
+LOGINS=${LOGINS:-""}
+
+WAITS=${WAITS:-120}
+DUMPS=${DUMPS:-3}
+
+# Defaut swithces
+LOWMEM=${LOWMEM:-"true"}
+LIMIT=${LIMIT:-"false"}
+TMPFS=${TMPFS:-"true"}
+BACKUP=${BACKUP:-"true"}
+INTERNAL=${INTERNAL:-"false"}
+RESTORE=${RESTORE:-"true"}
+
+
+CONFIG=/data/options.json
+
+. /opt/mariadb-support/lib/mariadbio.sh
+
+
+if [ "${TMPFS}" = "true" ];then
+  MDATAL="/tmpfs/databases"
+fi
+
+function stop_mariadb() {
+  local interal_pid
+  if [ "${INTERNAL}" = "true" ];then
+       dump_mariadb "${DDATAL}" &
+       internal_pid=$!
+  fi
+  if [ "${BACKUP}" = "true" ];then
+       dump_mariadb "${BDBDIR}"
+  fi
+  wait ${internal_pid}
+  echo "[INFO] Stopping mariadb system"
+  mysqladmin shutdown
+  EC=$?
+  echo "[Info] mariadb done"
+  if [ -r "${MCDDIR}/post.sh" ];then . "${MCDDIR}/post.sh";fi
+  : > "${DDATAL}/.mariadb"
+  exit ${EC}
+}
+
+function main() {
+  mkdir -p "${DDATAL}"
+  mkdir -p "$MCDDIR"
+  mkdir -p "/data/dump"
+  cp -vr "$TCFDIR/." "$MCFDIR/"
+  echo "$MDATAL" >>"$MCFDIR/03-location.cnf"
+
+  # Init mariadb
+  if [ ! -d "$MDATAL" ]; then
+     echo "[INFO] Create a new mariadb initial system in $MDATAL"
+     mysql_install_db --user=root --datadir="$MDATAL" --skip-name-resolve --skip-test-db > /dev/null
+     EXISTING="false"
+  else
+    echo "[INFO] Using existing mariadb system in $MDATAL"
+    EXISTING="true"
+  fi
+
+  if [ -r "$MCDDIR/pre.sh" ];then
+    . "$MCDDIR/pre.sh";
+  fi
+
+  # FIXME options
+  # Start mariadb
+  echo "[INFO] Start MariaDB No Networking"
+  mysqld_safe --datadir="$MDATAL" --user=root --skip-log-bin --skip-networking < /dev/null &
+  MARIADB_PID=$!
+  wait_mariadb || true
+
+  if [ "$EXISTING" = "true" ];then
+    echo "[INFO] Check data integrity and fix corruptions"
+    mysqlcheck --no-defaults --databases mysql --fix-db-names --fix-table-names || true
+    mysqlcheck --no-defaults --databases mysql --check --check-upgrade --auto-repair || true
+    mysqlcheck --no-defaults --all-databases --skip-database=mysql --fix-db-names --fix-table-names || true
+    mysqlcheck --no-defaults --all-databases --skip-database=mysql --check --check-upgrade --auto-repair || true
+    mysql_upgrade --silent
+  else
+    if [ "$RESTORE" = "true" ];then
+	    restore_mariadb
+    fi
+  fi
+  mysql -e "flush privileges;" || true
+  mysqladmin flush-tables
+
+  # FIXME remove jq user env
+  # Init databases
+  echo "[INFO] Init custom database(s)"
+  for database in $DATABASES; do
+    echo "[INFO] Create database ${database}"
+    mysql -e "CREATE DATABASE ${database};" 2> /dev/null || true
+  done
+
+  # Init logins
+  echo "[INFO] Init/Update users"
+  for (( i=0; i < "$LOGINS"; i++ )); do
+    USERNAME=$(jq --raw-output ".logins[$i].username" $CONFIG)
+    PASSWORD=$(jq --raw-output ".logins[$i].password" $CONFIG)
+
+    if mysql -e "SET PASSWORD FOR '${USERNAME}'@'%' = PASSWORD('${PASSWORD}');" 2> /dev/null; then
+        echo "[INFO] Update user ${USERNAME}"
+    else
+        echo "[INFO] Create user ${USERNAME}"
+	mysql -e "CREATE USER '${USERNAME}'@'%' IDENTIFIED BY '${PASSWORD}';" 2> /dev/null || true
+    fi
+  done
+
+  # Init rights
+  echo "[INFO] Init/Update rights"
+  for (( i=0; i < "$RIGHTS"; i++ )); do
+    USERNAME=$(jq --raw-output ".rights[$i].username" $CONFIG)
+    DATABASE=$(jq --raw-output ".rights[$i].database" $CONFIG)
+    # FIXME default grant for compat with std plugin
+    GRANT=$(jq --raw-output ".rights[$i].grant" $CONFIG)
+
+    echo "[INFO] Alter rights for ${USERNAME} to ${DATABASE}"
+    mysql -e "GRANT ${GRANT} ${DATABASE}.* TO '${USERNAME}'@'%';" || true
+  done
+  if [ -r "$MCDDIR/pre.sh" ];then
+    mysql -e "flush privileges;" || true
+    mysqladmin flush-tables
+    . "$MCDDIR/private.sh";
+  fi
+  mysqladmin shutdown
+
+  echo "[INFO] Start MariaDB"
+  mysqld_safe --datadir="$MDATAL" --user=root --skip-log-bin < /dev/null &
+  MARIADB_PID=$!
+  wait_mariadb
+  echo -n "$MARIADB_PID" > /tmpfs/.mariadb_ready
+  trap "stop_mariadb" SIGTERM SIGINT
+  trap "" SIGHUP
+
+  if [ -r "$MCDDIR/running.sh" ];then . "$MCDDIR/running.sh";fi
+
+  if [ "${DUMPS}" -gt 0 ];then
+    ls -tp "${DDATAL}" | grep -v '/$' | tail -n +$((DUMPS+1))| while IFS= read -r f; do echo "[INFO] purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
+  fi
+  if [ "${DUMPS}" -gt 0 ];then
+    ls -tAp "${DDATAL}" | grep -v '/$' | grep '^\.' | while IFS= read -r f; do echo "[WARN] purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
+  fi
+
+  wait "$MARIADB_PID"
+
+  if [ -r "$MCDDIR/post.sh" ];then . "$MCDDIR/post.sh";fi
+}
+
+main
+# vim: ft=sh

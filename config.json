@@ -1,12 +1,14 @@
 {
   "name": "MariaDB+",
-  "version": "0.11.13",
+  "version": "0.12.8",
   "slug": "mariadbp",
   "description": "An SQL database server plus...",
   "url": "https://github.com/pssc/hassio-addons-mariadb/",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
-  "startup": "system",
+  "services": ["mysql:provide"],
+  "startup": "initialize",
   "boot": "auto",
+  "stdin": true,
   "ports": {
     "3306/tcp": null
   },
@@ -33,16 +35,16 @@
     "ssl": "bool?",
     "certfile": "str?",
     "keyfile": "str?",
-    "leave_front_door_open": "bool?",
     "tmpfs": "bool?",
     "lowmem": "bool?",
     "limit": "bool?",
-    "dump": "bool?",
+    "backup": "bool?",
+    "internal": "bool?",
     "restore": "bool?",
-    "S6_KILL_GRACETIME": "int?",
-    "S6_SERVICES_GRACETIME": "int?"
+    "register": ["str"]
   },
-  "timeout": 120,
+  "stage": "experimental",
+  "timeout": 180,
   "map": [
       "config:rw",
       "ssl",
@@ -51,6 +53,5 @@
   ],
   "tmpfs":"size=4g,rw",
   "hassio_api": true,
-  "homeassistant_api": true,
-  "legacy": true
+  "homeassistant_api": true
 }
