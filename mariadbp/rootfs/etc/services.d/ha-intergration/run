@@ -118,9 +118,9 @@ EOF
   #fi
 
   # Init databases
-  echo "[INFO] Init custom database(s)"
+  bashio::log.info "Init custom database(s)"
   for database in $DATABASES; do
-    echo "[INFO] Create database ${database}"
+     bashio::log.info "Create database ${database}"
     mysql -e "CREATE DATABASE ${database};" 2> /dev/null || true
   done
 
@@ -131,22 +131,22 @@ EOF
     PASSWORD=$(jq --raw-output ".logins[$i].password" "$CONFIG")
 
     if mysql -e "SET PASSWORD FOR '${USERNAME}'@'%' = PASSWORD('${PASSWORD}');" 2> /dev/null; then
-        echo "[INFO] Update user ${USERNAME}"
+         bashio::log.info "Update user ${USERNAME} with ${PASSWORD}"
     else
-        echo "[INFO] Create user ${USERNAME}"
+         bashio::log.info "Create user ${USERNAME} pwd ${PASSWORD}"
         mysql -e "CREATE USER '${USERNAME}'@'%' IDENTIFIED BY '${PASSWORD}';" 2> /dev/null || true
     fi
   done
 
   # Init rights
-  echo "[INFO] Init/Update rights"
+  bashio::log.info "Init/Update rights"
   for (( i=0; i < "$RIGHTS"; i++ )); do
     USERNAME=$(jq --raw-output ".rights[$i].username" "$CONFIG")
     DATABASE=$(jq --raw-output ".rights[$i].database" "$CONFIG")
     # FIXME default grant for compat with std plugin
     GRANT=$(jq --raw-output ".rights[$i].grant" "$CONFIG")
 
-    echo "[INFO] Alter rights for ${USERNAME} to ${DATABASE}"
+    bashio::log.info  "Alter rights for ${USERNAME} to ${DATABASE}"
     mysql -e "GRANT ${GRANT} ${DATABASE}.* TO '${USERNAME}'@'%';" || true
   done
   mysqladmin shutdown
@@ -172,10 +172,10 @@ EOF
   ha-event "service" "${PAYLOAD}"
 
   if [ "${DUMPS}" -gt 0 ];then
-    ls -tp "${DDATAL}" | grep -v '/$' | tail -n +$((DUMPS+1))| while IFS= read -r f; do echo "[INFO] purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
+    ls -tp "${DDATAL}" | grep -v '/$' | tail -n +$((DUMPS+1))| while IFS= read -r f; do  bashio::log.info "purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
   fi
   if [ "${DUMPS}" -gt 0 ];then
-    ls -tAp "${DDATAL}" | grep -v '/$' | grep '^\.' | while IFS= read -r f; do echo "[WARN] purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
+    ls -tAp "${DDATAL}" | grep -v '/$' | grep '^\.' | while IFS= read -r f; do  bashio::log.warn "purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
   fi
 }
 
