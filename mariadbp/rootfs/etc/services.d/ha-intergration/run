@@ -12,11 +12,21 @@ SERVICEP=${HAA_NAME:-"mariadbp"}
 SECF="/data/secret"
 # PID FILE once ready
 #FIXME use VAR
-MDRF="/tmpfs/.mariadb_ready" 
+MDRF="/tmpfs/.mariadb_configure"
 # dump location
 DDATAL=${DDATAL:-"/data/dump"}
 # backup location
 BDBDIR=${BDBDIR:-"/backup"}
+
+#Database
+DATABASES=${DATABASES:-""}
+RIGHTS=${RIGHTS:-""}
+LOGINS=${LOGINS:-""}
+
+WAITS=${WAITS:-120}
+DUMPS=${DUMPS:-3}
+
+CONFIG=/data/options.json
 
 function ha-event() {
   local EVENTNAME="${SERVICEP}.${1}"
@@ -30,36 +40,52 @@ function ha-event() {
   echo
 }
 
-function main() {
+function stop() {
+  if bashio::config.exists register;then
+     for i in $(bashio::config register);do
+       SERVICE=$i
+       bashio::services.delete "${SERVICE}"
+     done
+  fi
+}
+
+function setup() {
   bashio::log.info "Waiting for mariadb..."
   while [[ ! -r "${MDRF}" ]];do
+    # FIXME TIMEOUT
     sleep 1
   done
-  #MARIADB_PID=$(<"${MDRF}")
   wait_mariadb
 
   SERVICE="mysql"
   if bashio::services.available "${SERVICE}";then
       # Serice data cache
-      SERVICEF="/tmpfs/${SERVICE}.ha.service"
+      SERVICEF="/tmpfs/${SERVICE}.service.json"
       DBSH=$(bashio::services "mysql" host)
-      DBSP="^$(bashio::services "mysql" port)"
+      DBSP="$(bashio::services "mysql" port)"
       DBSU=$(bashio::services "mysql" username)
-      DBSP=$(bashio::services "mysql" password)
+      DBSS=$(bashio::services "mysql" password)
       bashio::var.json \
         host "${DBSH}" \
         port "${DBSP}" \
         username "${DBSU}" \
-        password "${DBSP}" > "${SERVICEF}"
+        password "${DBSS}" > "${SERVICEF}"
       bashio::log.info "Service ${SERVICE} $(cat ${SERVICEF})"
+      # my.cnf FIXME VAR remove on exit?
+      cat <<EOF >"/config/mariadb/client.${SERVICE}.cnf"
+[client]
+host=${DBSH}
+port=${DBSP}
+user=${DBSU}
+password=${DBSS}
+EOF
       if ! bashio::fs.file_exists "${SECF}"; then
         # Clone password
-        echo "${DBSP}" > "${SECF}"
+         bashio::log.info "Cloning mysql service password"
+        echo "${DBSS}" > "${SECF}"
       fi
   fi
 
- 
-  # FIXME move to ssl?
   if ! bashio::fs.file_exists "${SECF}"; then
     bashio::log.info "Generating service password for Home Assistant"
     pwgen 64 1 > "${SECF}"
@@ -70,18 +96,62 @@ function main() {
   #readonly?
   PAYLOAD=$(bashio::var.json \
         host "$(hostname)" \
-        port "^3306" \
+        port "3306" \
         username "service" \
         password "${SECRET}")
 
   #FXIME Private? Clone per service...
   bashio::log.info "Creating service user and permissions for Home Assistant"
   mysql -e "CREATE USER 'service'@'172.30.32.%' IDENTIFIED BY '${SECRET}';" 2> /dev/null || true
+  mysql -e "SET PASSWORD FOR 'service'@'172.30.32.%' = PASSWORD('${SECRET}');" 2> /dev/null || true
   mysql -e "CREATE USER 'service'@'172.30.33.%' IDENTIFIED BY '${SECRET}';" 2> /dev/null || true
+  mysql -e "SET PASSWORD FOR 'service'@'172.30.33.%' = PASSWORD('${SECRET}');" 2> /dev/null || true
   mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'service'@'172.30.32.%' WITH GRANT OPTION;" 2> /dev/null || true
   mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'service'@'172.30.33.%' WITH GRANT OPTION;" 2> /dev/null || true
   mysql -e "FLUSH PRIVILEGES;" 2> /dev/null || true
 
+  #if mysql -e "SET PASSWORD FOR '${USERNAME}'@'%' = PASSWORD('${PASSWORD}');" 2> /dev/null; then
+  #      echo "[INFO] Update user ${USERNAME}"
+  #  else
+  #      echo "[INFO] Create user ${USERNAME}"
+  #      mysql -e "CREATE USER '${USERNAME}'@'%' IDENTIFIED BY '${PASSWORD}';" 2> /dev/null || true
+  #fi
+
+  # Init databases
+  echo "[INFO] Init custom database(s)"
+  for database in $DATABASES; do
+    echo "[INFO] Create database ${database}"
+    mysql -e "CREATE DATABASE ${database};" 2> /dev/null || true
+  done
+
+  # Init logins
+  echo "[INFO] Init/Update users"
+  for (( i=0; i < "$LOGINS"; i++ )); do
+    USERNAME=$(jq --raw-output ".logins[$i].username" "$CONFIG")
+    PASSWORD=$(jq --raw-output ".logins[$i].password" "$CONFIG")
+
+    if mysql -e "SET PASSWORD FOR '${USERNAME}'@'%' = PASSWORD('${PASSWORD}');" 2> /dev/null; then
+        echo "[INFO] Update user ${USERNAME}"
+    else
+        echo "[INFO] Create user ${USERNAME}"
+        mysql -e "CREATE USER '${USERNAME}'@'%' IDENTIFIED BY '${PASSWORD}';" 2> /dev/null || true
+    fi
+  done
+
+  # Init rights
+  echo "[INFO] Init/Update rights"
+  for (( i=0; i < "$RIGHTS"; i++ )); do
+    USERNAME=$(jq --raw-output ".rights[$i].username" "$CONFIG")
+    DATABASE=$(jq --raw-output ".rights[$i].database" "$CONFIG")
+    # FIXME default grant for compat with std plugin
+    GRANT=$(jq --raw-output ".rights[$i].grant" "$CONFIG")
+
+    echo "[INFO] Alter rights for ${USERNAME} to ${DATABASE}"
+    mysql -e "GRANT ${GRANT} ${DATABASE}.* TO '${USERNAME}'@'%';" || true
+  done
+  mysqladmin shutdown
+
+  wait_mariadb
   # Send service information to the Supervisor
   if bashio::config.exists register;then
      for i in $(bashio::config register);do
@@ -95,9 +165,21 @@ function main() {
        fi
      done
   fi
+  trap "stop" SIGTERM SIGINT
+  trap "" SIGHUP
+
+  bashio::net.wait_for 8123 homeassistant 120
   ha-event "service" "${PAYLOAD}"
 
+  if [ "${DUMPS}" -gt 0 ];then
+    ls -tp "${DDATAL}" | grep -v '/$' | tail -n +$((DUMPS+1))| while IFS= read -r f; do echo "[INFO] purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
+  fi
+  if [ "${DUMPS}" -gt 0 ];then
+    ls -tAp "${DDATAL}" | grep -v '/$' | grep '^\.' | while IFS= read -r f; do echo "[WARN] purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
+  fi
+}
 
+function eventloop() {
   bashio::log.info 'Starting the Home Assistant STDIN service...'
   # shellcheck disable=SC2162
   while read msg; do
@@ -134,6 +216,7 @@ function main() {
         ha-event "size" '{ "size" : "'"${result}"'", "output" : "'"$(</tmpfs/mariadb_size.txt)"'" }'
       ;;
       check)
+	#FIXME ARGS
         local result
         if mysqlcheck --all-databases | tee /tmpfs/mariadb_check_results; then
           bashio::log.info "Command completed successfully."
@@ -149,11 +232,21 @@ function main() {
 	# do dump
 	# load dump
       ;;
+      copy)
+        # arg db?
+      ;;
       *) bashio::log.error "Command not found: ${cmd}" ;;
     esac
   done < /proc/1/fd/0
   bashio::log.info 'Finished the Home Assistant STDIN service...'
   exit 1
+}
+
+function main() {
+	if [ ! -r /tmpfs/.mariadb_ready ]; then
+	  setup
+	fi
+	eventloop
 }
 
 main
