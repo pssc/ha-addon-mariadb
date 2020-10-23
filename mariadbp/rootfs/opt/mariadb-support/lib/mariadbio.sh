@@ -27,15 +27,18 @@ function dump_mariadb() {
     local FILEDT="${DDDIR}/.$FILEDL"
     local FILED="${DDDIR}/$FILEDL"
     echo "$(date -Iseconds) [INFO] Dumping mariadb system ${FILED}"
-    mysqldump -A --quick | xz ${XZDUMPOPTS:-"-T0"} >"${FILEDT}"
-    EC=$?
-    #FIXME set-e will not work if?
-    echo "$(date -Iseconds) [Info] mysqldump ${FILED} / xz exit ($EC) size: $(du ${FILEDT} | cut -f 1)"
-    du ${FILEDT}
-    if [ ! -z "${FILEDT}" ];then
+    #if? non zero exit...
+    if mysqldump ${MDDUMPOPTS:--A --opt} | xz ${XZDUMPOPTS:--0 -T0} >"${FILEDT}";then
+      sync
+      if [ -s "${FILEDT}" ];then
             mv "${FILEDT}" "${FILED}"
 	    sync
+            echo "$(date -Iseconds) [INFO] mysqldump ${FILED} / size: $(du ${FILED} | cut -f 1)"
 	    return 0
+      fi
+    else
+      EC=$?
+      echo "$(date -Iseconds) [ERROR] mysqldump ${FILED} / xz exit ($EC) size: $(du ${FILET} | cut -f 1)"
     fi
     return 1
 }
