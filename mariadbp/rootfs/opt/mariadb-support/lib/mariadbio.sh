@@ -45,7 +45,7 @@ function dump_mariadb() {
 
 function restore_mariadb() {
     # FIXME 
-    local LATEST_DUMP=${1:-$(find "/data/dump" "${BDBDIR}" -name 'mariadb-dump.*' | sort -t . -k 2| tail -1)}
+    local LATEST_DUMP=${1:-$(find -maxdepth ${DEPTH_DUMP:-1} "/data/dump" "${BDBDIR}" -name 'mariadb-dump.*' | sort -t . -k 2| tail -1)}
     echo "$(date -Iseconds) [INFO] Restoring mariadb system with ${LATEST_DUMP}"
     if [ -r "${LATEST_DUMP}" ];then
        # check? integrity of dump
