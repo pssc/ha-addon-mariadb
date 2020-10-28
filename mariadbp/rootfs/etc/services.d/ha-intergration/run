@@ -130,7 +130,7 @@ EOF
     USERNAME=$(jq --raw-output ".logins[$i].username" "$CONFIG")
     PASSWORD=$(jq --raw-output ".logins[$i].password" "$CONFIG")
     # Handel null password
-    if "${PASSWORD}" = "null";then
+    if [ "${PASSWORD}" = "null" ];then
        if [ ! -r "${SECF}.${USERNAME}" ];then
            pwgen 64 1 > "${SECF}.${USERNAME}"
        fi
