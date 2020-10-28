@@ -144,7 +144,7 @@ EOF
         mysql -e "CREATE USER '${USERNAME}'@'%' IDENTIFIED BY '${PASSWORD}';" 2> /dev/null || true
     fi
     #Write client config..
-    if [ ! -r "/config/mariadb/client.${USERNAME}.cnf"];then
+    if [ ! -r "/config/mariadb/client.${USERNAME}.cnf" ];then
       cat <<EOF >"/config/mariadb/client.${USERNAME}.cnf"
 [client]
 host=${DBSH}
