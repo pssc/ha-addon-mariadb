@@ -57,6 +57,7 @@ function setup() {
   done
   wait_mariadb
 
+  # FIXME for multiple services when supproted
   SERVICE="mysql"
   if bashio::services.available "${SERVICE}";then
       # Serice data cache
@@ -125,10 +126,11 @@ EOF
   done
 
   # Init logins
-  echo "[INFO] Init/Update users"
+  bashio::log.info "Init/Update users"
   for (( i=0; i < "$LOGINS"; i++ )); do
     USERNAME=$(jq --raw-output ".logins[$i].username" "$CONFIG")
     PASSWORD=$(jq --raw-output ".logins[$i].password" "$CONFIG")
+    #FIXME Host
     # Handel null password
     if [ "${PASSWORD}" = "null" ];then
        if [ ! -r "${SECF}.${USERNAME}" ];then
@@ -140,7 +142,7 @@ EOF
     if mysql -e "SET PASSWORD FOR '${USERNAME}'@'%' = PASSWORD('${PASSWORD}');" 2> /dev/null; then
          bashio::log.info "Update user ${USERNAME} with ${PASSWORD}"
     else
-         bashio::log.info "Create user ${USERNAME} pwd ${PASSWORD}"
+        bashio::log.info "Create user ${USERNAME} pwd ${PASSWORD}"
         mysql -e "CREATE USER '${USERNAME}'@'%' IDENTIFIED BY '${PASSWORD}';" 2> /dev/null || true
     fi
     #Write client config..
@@ -163,9 +165,15 @@ EOF
     # FIXME default grant for compat with std plugin
     GRANT=$(jq --raw-output ".rights[$i].grant" "$CONFIG")
 
-    bashio::log.info  "Alter rights for ${USERNAME} to ${DATABASE}"
-    mysql -e "GRANT ${GRANT} ${DATABASE}.* TO '${USERNAME}'@'%';" || true
+    # FIXME HOST
+    if mysql -e "GRANT ${GRANT} ${DATABASE}.* TO '${USERNAME}'@'%';" 2> /dev/null; then
+        bashio::log.info  "Alter rights for ${USERNAME} to ${DATABASE}"
+    fi
+
   done
+  mysql -e "flush privileges;" || true
+  mysqladmin flush-tables
+  bashio::log.info "shutdown mariadb after config and wait"
   mysqladmin shutdown
 
   wait_mariadb
