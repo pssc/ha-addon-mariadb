@@ -44,7 +44,10 @@ function stop_mariadb() {
   if [ "${BACKUP}" = "true" ];then
        dump_mariadb "${BDBDIR}"
   fi
-  wait ${internal_pid}
+
+  if [ "${internal_pid:-null}" != "null"];then
+     wait ${internal_pid}
+  fi
   echo "[INFO] Stopping mariadb system"
   mysqladmin shutdown
   EC=$?
