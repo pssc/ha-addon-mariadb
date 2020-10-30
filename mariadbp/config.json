@@ -1,6 +1,6 @@
 {
   "name": "MariaDB+",
-  "version": "0.12.17",
+  "version": "0.12.18",
   "slug": "mariadbp",
   "description": "An SQL database server plus...",
   "url": "https://github.com/pssc/hassio-addons-mariadb/",

@@ -80,6 +80,14 @@ port=${DBSP}
 user=${DBSU}
 password=${DBSS}
 EOF
+cat <<EOF >"/config/mariadb/client.${SERVICE}.mariadbp.cnf"
+[client]
+host=$(hostname)
+port=${DBSP}
+user=${DBSU}
+password=${DBSS}
+EOF
+
       if ! bashio::fs.file_exists "${SECF}"; then
         # Clone password
          bashio::log.info "Cloning mysql service password"
@@ -149,7 +157,7 @@ EOF
     if [ ! -r "/config/mariadb/client.${USERNAME}.cnf" ];then
       cat <<EOF >"/config/mariadb/client.${USERNAME}.cnf"
 [client]
-host=${DBSH}
+host=$(hostname)
 port=${DBSP}
 user=${USERNAME}
 password=${PASSWORD}
