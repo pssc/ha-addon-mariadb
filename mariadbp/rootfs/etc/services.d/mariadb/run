@@ -45,7 +45,7 @@ function stop_mariadb() {
        dump_mariadb "${BDBDIR}"
   fi
 
-  if [ "${internal_pid:-null}" != "null"];then
+  if [ "${internal_pid:-null}" != "null" ];then
      wait ${internal_pid}
   fi
   echo "[INFO] Stopping mariadb system"
