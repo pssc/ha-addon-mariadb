@@ -184,7 +184,7 @@ EOF
     fi
     PASSWORD=$(grep password "/config/mariadb/client.${USERNAME}.cnf"| sed 's/password=//')
      cat <<EOF >"/config/mariadb/secret.${USERNAME}.${DATABASE}.yaml"
-${USERNAME}_${DATABASE}_${HAA_NAME}}: mysql://${USERNAME}:${PASSWORD}@$(hostname)/${DATABASE}?charset=utf8
+${USERNAME}_${DATABASE}_${HAA_NAME}: mysql://${USERNAME}:${PASSWORD}@$(hostname)/${DATABASE}?charset=utf8
 EOF
     #FIXME MASTER SECRET?
   done
