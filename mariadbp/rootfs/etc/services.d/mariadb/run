@@ -23,8 +23,8 @@ DUMPS=${DUMPS:-3}
 LOWMEM=${LOWMEM:-"true"}
 LIMIT=${LIMIT:-"false"}
 TMPFS=${TMPFS:-"true"}
-BACKUP=${BACKUP:-"true"}
-INTERNAL=${INTERNAL:-"false"}
+BACKUP=${BACKUP:-"false"}
+INTERNAL=${INTERNAL:-"true"}
 RESTORE=${RESTORE:-"true"}
 
 
