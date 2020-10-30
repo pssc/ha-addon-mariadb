@@ -1,6 +1,6 @@
 {
   "name": "MariaDB+",
-  "version": "0.12.20",
+  "version": "0.12.22",
   "slug": "mariadbp",
   "description": "An SQL database server plus...",
   "url": "https://github.com/pssc/hassio-addons-mariadb/",
@@ -21,7 +21,7 @@
       {"username": "ha" }
     ],
     "rights": [
-      {"username": "ha", "database": "homeassistant", "grant": "ALL PRIVILEGES ON"}
+      {"username": "ha", "database": "homeassistant" }
     ],
     "register": []
   },
@@ -31,7 +31,7 @@
         {"username": "str", "host": "str?", "password": "str?"}
     ],
     "rights": [
-      {"username": "str", "host": "str?", "database": "str", "grant": "str"}
+      {"username": "str", "host": "str?", "database": "str", "grant": "str?"}
     ],
     "ssl": "bool?",
     "certfile": "str?",

@@ -174,13 +174,17 @@ EOF
     # FIXME default grant for compat with std plugin
     GRANT=$(jq --raw-output ".rights[$i].grant" "$CONFIG")
 
+    if [ "${GRANT}" = "null" ];then
+       GRANT="ALL PRIVILEGES ON"
+    fi
+
     # FIXME HOST
     if mysql -e "GRANT ${GRANT} ${DATABASE}.* TO '${USERNAME}'@'%';" 2> /dev/null; then
         bashio::log.info  "Alter rights for ${USERNAME} to ${DATABASE}"
     fi
     PASSWORD=$(grep password "/config/mariadb/client.${USERNAME}.cnf"| sed 's/password=//')
      cat <<EOF >"/config/mariadb/secret.${USERNAME}.${DATABASE}.yaml"
-${USER}_${DATABASE}_${HAA_NAME}}: mysql://${USERNAME}:${PASSWORD}@$(hostname)/${DATABASE}?charset=utf8
+${USERNAME}_${DATABASE}_${HAA_NAME}}: mysql://${USERNAME}:${PASSWORD}@$(hostname)/${DATABASE}?charset=utf8
 EOF
     #FIXME MASTER SECRET?
   done
