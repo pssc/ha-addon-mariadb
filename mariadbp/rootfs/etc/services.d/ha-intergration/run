@@ -114,9 +114,9 @@ EOF
 cat <<EOF >"/config/mariadb/client.${SERVICE}.mariadbp.cnf"
 [client]
 host=$(hostname)
-port=${DBSP}
-user=${DBSU}
-password=${DBSS}
+port=${DBSP:-3306}
+user=${DBSU:-"service"}
+password=${DBSS:-$SECRET}
 EOF
 
   #if mysql -e "SET PASSWORD FOR '${USERNAME}'@'%' = PASSWORD('${PASSWORD}');" 2> /dev/null; then
@@ -217,7 +217,7 @@ EOF
     ls -tp "${DDATAL}" | grep -v '/$' | tail -n +$((DUMPS+1))| while IFS= read -r f; do  bashio::log.info "purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
   fi
   if [ "${DUMPS}" -gt 0 ];then
-    ls -tAp "${DDATAL}" | grep -v '/$' | grep '^\.' | while IFS= read -r f; do  bashio::log.warn "purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
+    ls -tAp "${DDATAL}" | grep -v '/$' | grep '^\.' | while IFS= read -r f; do  bashio::log.warning "purge ${DDATAL}/$f"; rm "${DDATAL}/$f"; done || true
   fi
 }
 
