@@ -30,9 +30,10 @@ RESTORE=${RESTORE:-"true"}
 
 . /opt/mariadb-support/lib/mariadbio.sh
 
+sleep 6d
 
 if [ "${TMPFS}" = "true" ];then
-  MDATAL="/tmpfs/databases"
+  MDATAL="/tmp/databases"
 fi
 
 function stop_mariadb() {
@@ -54,7 +55,7 @@ function stop_mariadb() {
   echo "[Info] mariadb done"
   if [ -r "${MCDDIR}/post.sh" ];then . "${MCDDIR}/post.sh";fi
   : > "${DDATAL}/.mariadb"
-  echo -n "$MARIADB_PID" > /tmpfs/.mariadb_done
+  echo -n "$MARIADB_PID" > /tmp/.mariadb_done
   exit ${EC}
 }
 
@@ -105,7 +106,7 @@ function main() {
     mysqladmin flush-tables
     . "$MCDDIR/private.sh";
   fi
-  echo -n "$MARIADB_PID" > /tmpfs/.mariadb_configure
+  echo -n "$MARIADB_PID" > /tmp/.mariadb_configure
   #FIXME TIMEOUT
   wait $MARIADB_PID
   cp -vr "$TCFDIR/." "$MCFDIR/"
@@ -114,7 +115,7 @@ function main() {
   mysqld_safe --datadir="$MDATAL" --user=root --skip-log-bin < /dev/null &
   MARIADB_PID=$!
   wait_mariadb
-  echo -n "$MARIADB_PID" > /tmpfs/.mariadb_ready
+  echo -n "$MARIADB_PID" > /tmp/.mariadb_ready
   trap "stop_mariadb" SIGTERM SIGINT
   trap "" SIGHUP
 
@@ -123,7 +124,7 @@ function main() {
   wait "$MARIADB_PID"
 
   if [ -r "$MCDDIR/post.sh" ];then . "$MCDDIR/post.sh";fi
-  echo -n "$MARIADB_PID" > /tmpfs/.mariadb_done
+  echo -n "$MARIADB_PID" > /tmp/.mariadb_done
 }
 
 main

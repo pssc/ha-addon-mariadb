@@ -1,6 +1,6 @@
 {
   "name": "MariaDB+",
-  "version": "0.12.27",
+  "version": "0.12.29",
   "slug": "mariadbp",
   "description": "An SQL database server plus...",
   "url": "https://github.com/pssc/hassio-addons-mariadb/",
@@ -55,7 +55,7 @@
       "share:rw",
       "backup:rw"
   ],
-  "tmpfs":"size=4g,rw",
+  "tmpfs": true,
   "hassio_api": true,
   "homeassistant_api": true
 }

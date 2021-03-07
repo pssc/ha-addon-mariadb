@@ -9,7 +9,7 @@ BDBDIR=${BDBDIR:-"/backup"}
 function main() {
   local WC=0
   bashio::log.debug "Waiting for mariadb to finish..."
-  while [[ ! -r /tmpfs/.mariadb_done ]];do
+  while [[ ! -r /tmp/.mariadb_done ]];do
     WC=$((WC+1)) 
     sleep 1
   done
