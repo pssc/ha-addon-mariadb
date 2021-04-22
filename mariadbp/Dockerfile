@@ -13,3 +13,4 @@ VOLUME /share
 VOLUME /backup
 VOLUME /config
 VOLUME /ssl
+#VOLUME /tmp

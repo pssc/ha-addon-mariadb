@@ -30,7 +30,7 @@ RESTORE=${RESTORE:-"true"}
 
 . /opt/mariadb-support/lib/mariadbio.sh
 
-sleep 6d
+#sleep 6d
 
 if [ "${TMPFS}" = "true" ];then
   MDATAL="/tmp/databases"
@@ -128,4 +128,5 @@ function main() {
 }
 
 main
+#sleep 6d
 # vim: ft=sh

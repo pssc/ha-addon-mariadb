@@ -12,7 +12,7 @@ SERVICEP=${HAA_NAME:-"mariadbp"}
 SECF="/data/secret"
 # PID FILE once ready
 #FIXME use VAR
-MDRF="/tmpfs/.mariadb_configure"
+MDRF="/tmp/.mariadb_configure"
 # dump location
 DDATAL=${DDATAL:-"/data/dump"}
 # backup location
@@ -61,7 +61,7 @@ function setup() {
   SERVICE="mysql"
   if bashio::services.available "${SERVICE}";then
       # Serice data cache
-      SERVICEF="/tmpfs/${SERVICE}.service.json"
+      SERVICEF="/tmp/${SERVICE}.service.json"
       DBSH=$(bashio::services "mysql" host)
       DBSP="$(bashio::services "mysql" port)"
       DBSU=$(bashio::services "mysql" username)
@@ -254,20 +254,20 @@ function eventloop() {
         ha-event "restored" "{ }"
       ;;
       size)
-        mysql -e 'SELECT table_schema AS "Database", ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS "Size (MB)" FROM information_schema.TABLES GROUP BY table_schema;' | tee /tmpfs/mariadb_size.txt || true
-        ha-event "size" '{ "size" : "'"${result}"'", "output" : "'"$(</tmpfs/mariadb_size.txt)"'" }'
+        mysql -e 'SELECT table_schema AS "Database", ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS "Size (MB)" FROM information_schema.TABLES GROUP BY table_schema;' | tee /tmp/mariadb_size.txt || true
+        ha-event "size" '{ "size" : "'"${result}"'", "output" : "'"$(</tmp/mariadb_size.txt)"'" }'
       ;;
       check)
 	#FIXME ARGS
         local result
-        if mysqlcheck --all-databases | tee /tmpfs/mariadb_check_results; then
+        if mysqlcheck --all-databases | tee /tmp/mariadb_check_results; then
           bashio::log.info "Command completed successfully."
           result="true"
         else
           bashio::log.error "Check Command exited with a failure status."
           result="false"
         fi
-        ha-event "checked" '{ "ok" : "'"${result}"'", "output" : "'"$(</tmpfs/mariadb_check_results.txt)"'" }'
+        ha-event "checked" '{ "ok" : "'"${result}"'", "output" : "'"$(</tmp/mariadb_check_results.txt)"'" }'
       ;;
       migrate)
 	# Get creds
@@ -285,7 +285,7 @@ function eventloop() {
 }
 
 function main() {
-	if [ ! -r /tmpfs/.mariadb_ready ]; then
+	if [ ! -r /tmp/.mariadb_ready ]; then
 	  setup
 	fi
 	eventloop
